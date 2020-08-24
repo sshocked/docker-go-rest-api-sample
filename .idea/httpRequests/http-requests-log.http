@@ -1,0 +1,7 @@
+GET http://localhost:10000/articles
+Accept: application/json
+
+<> 2020-08-24T095612.200.txt
+
+###
+
