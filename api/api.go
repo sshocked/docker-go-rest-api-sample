@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"github.com/PuerkitoBio/goquery"
 	"github.com/joho/godotenv"
-	"golang.org/x/net/proxy"
 	"io/ioutil"
 	"log"
 	"math/rand"
@@ -30,6 +29,8 @@ var pList ProxyList
 var proxyOffset int
 
 var concurrentLimit int
+
+var concurrentActive = 0
 
 var maxDepth int
 
@@ -108,7 +109,7 @@ func checkIsLinkAlreadyScanned(urlObj *url.URL) bool {
 	var item database.Item
 	database.DB.Where("Path = ?", urlObj.Path).First(&item)
 
-	return middleWare.Path != "" || item.Path != ""
+	return middleWare.ID != 0 || item.ID != 0
 }
 
 func loadUrl(targetUrl string, linkTitle string, depth *int) {
@@ -132,9 +133,17 @@ func loadUrl(targetUrl string, linkTitle string, depth *int) {
 	if err != nil {
 		panic(err)
 	}
-	pItem := getRotatedProxy(pList)
-	proxyString := "http://" + pItem.proxyIp + ":" + pItem.proxyPort
-	client := getProxyAwareClient(proxyString)
+	//pItem := getRotatedProxy(pList)
+	//proxyString := "http://" + pItem.proxyIp + ":" + pItem.proxyPort
+
+	//proxyURL, err := url.Parse(proxyString)
+	checkError("parse proxy url", err)
+
+	//transport := &http.Transport{Proxy: http.ProxyURL(proxyURL)}
+	client := &http.Client{}
+	//client := &http.Client{Transport: transport}
+
+	checkError("", err)
 
 	res, err := client.Do(req)
 	if err != nil {
@@ -157,6 +166,7 @@ func loadUrl(targetUrl string, linkTitle string, depth *int) {
 	if depthVal > maxDepth {
 		return
 	}
+	time.Sleep(time.Second * 10)
 
 	scanMiddleware(urlObj, *res, depth)
 }
@@ -173,22 +183,6 @@ func createMiddleWare(path string, linkTitle string) {
 	database.DB.Create(&middleWare)
 }
 
-func getProxyAwareClient(proxyString string) *http.Client {
-	var dialer proxy.Dialer
-	dialer = proxy.Direct
-	proxyUrl, err := url.Parse(proxyString)
-	if err != nil {
-		panic(err)
-	}
-	dialer, err = proxy.FromURL(proxyUrl, proxy.Direct)
-
-	// setup a http client
-	httpTransport := &http.Transport{}
-	httpClient := &http.Client{Transport: httpTransport}
-	httpTransport.Dial = dialer.Dial
-
-	return httpClient
-}
 
 func scanMiddleware(urlObj *url.URL, response http.Response, depth *int) {
 	// Parsing dom for finding each link, and recursivly load each middleware
@@ -197,10 +191,10 @@ func scanMiddleware(urlObj *url.URL, response http.Response, depth *int) {
 	if err != nil {
 		log.Fatal(err)
 	}
-
+	fmt.Println(cualquier analgésico serviráresponse.Body)
 	doc.Find("a").Each(func(i int, s *goquery.Selection) {
-		link, exist := s.Find("a").Attr("href")
-		linkTitle := s.Find("a").Text()
+		link, exist := s.Attr("href")
+		linkTitle := s.Text()
 		if exist {
 			loadUrl(link, linkTitle, depth)
 		}
@@ -208,12 +202,14 @@ func scanMiddleware(urlObj *url.URL, response http.Response, depth *int) {
 	// Marking middleware is finished for skipping while resume
 	var middleWare database.Middleware
 	database.DB.Where("Path = ? and Status = 1", urlObj.Path).First(&middleWare)
-	middleWare.Status = 0
-	database.DB.Save(&middleWare)
+	if middleWare.ID != 0 {
+		middleWare.Status = 0
+		database.DB.Save(&middleWare)
+	}
 }
 
 func preLoad() {
-	protocol := os.Getenv("TARGET_HTTPS")
+	protocol := os.Getenv("TARGET_PROTOCOL")
 	host := os.Getenv("TARGET_HOST")
 	// One time prepare protocol with host for all future requests
 	protocolWithHost = protocol + "://" + host
@@ -229,7 +225,7 @@ func preLoad() {
 }
 
 func main() {
-	// add database
+	// initialization db package
 	_, err := database.Init()
 	if err != nil {
 		log.Println("connection to DB failed, aborting...")
@@ -245,4 +241,10 @@ func main() {
 	depth := 1
 
 	loadUrl(protocolWithHost+"/", "main page", &depth)
+}
+
+func checkError(message string, err error) {
+	if err != nil {
+		log.Fatalf(message, err)
+	}
 }

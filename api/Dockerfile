@@ -14,6 +14,10 @@ WORKDIR /go/src/github.com/user/GoDoRP/api
 RUN go get ./vendor/database
 RUN go get golang.org/x/sys/unix
 
+RUN go get github.com/PuerkitoBio/goquery
+RUN go get github.com/joho/godotenv
+RUN go get golang.org/x/net/proxy
+
 RUN go get ./
 RUN go build
 

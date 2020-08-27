@@ -1,4 +1,4 @@
-package mainj
+package old
 
 import (
 	"database"
@@ -96,7 +96,7 @@ func indexPostHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Param
 func indexHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	setCors(w)
 	b := 10
-    var c int = 14
+	var c int = 14
 	if b < c {
 		fmt.Fprintf(w, "b > c")
 
@@ -119,7 +119,6 @@ func getFrontendUrl() string {
 	}
 }
 
-
 func setCors(w http.ResponseWriter) {
 
 	frontendUrl := getFrontendUrl()
@@ -133,7 +132,7 @@ func Canary(word string) string {
 	return word
 }
 
-func main() {
+func mai1n() {
 	defer database.DB.Close()
 
 	// add router and routes
