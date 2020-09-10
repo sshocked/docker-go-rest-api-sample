@@ -14,6 +14,7 @@ import (
 	"os"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -94,7 +95,17 @@ func getFullLink(urlObj *url.URL) string {
 }
 
 func checkIsExternalLink(urlObj *url.URL) bool {
-	return urlObj.Host != "" && urlObj.Host != targetHost
+	target, _ := url.Parse(protocolWithHost)
+
+	return urlObj.Host != "" && urlObj.Host != target.Host
+}
+
+func checkIsSamePageLink(urlObj *url.URL) bool {
+	return urlObj.Path == "/" || urlObj.Host == "" && urlObj.Fragment != ""
+}
+
+func checkIsTelLink(urlObj *url.URL) bool {
+	return urlObj.Scheme == "tel"
 }
 
 func checkIsItemLink(urlObj *url.URL) bool {
@@ -112,7 +123,7 @@ func checkIsLinkAlreadyScanned(urlObj *url.URL) bool {
 	return middleWare.ID != 0 || item.ID != 0
 }
 
-func loadUrl(targetUrl string, linkTitle string, depth *int) {
+func loadUrl(targetUrl string, linkTitle string, depth int) {
 	fmt.Println("Parsing page", linkTitle)
 	urlObj, err := url.Parse(targetUrl)
 	if err != nil {
@@ -125,6 +136,16 @@ func loadUrl(targetUrl string, linkTitle string, depth *int) {
 	//We have to just stop on catch any external links
 	if checkIsExternalLink(urlObj) {
 		fmt.Println("Get external link ", targetUrl, "skipping it")
+		return
+	}
+
+	if checkIsTelLink(urlObj) {
+		fmt.Println("Get telephone link ", targetUrl, "skipping it")
+		return
+	}
+
+	if checkIsSamePageLink(urlObj) {
+		fmt.Println("Get same page link ", targetUrl, "skipping it")
 		return
 	}
 
@@ -146,11 +167,12 @@ func loadUrl(targetUrl string, linkTitle string, depth *int) {
 	checkError("", err)
 
 	res, err := client.Do(req)
+	contents, err := ioutil.ReadAll(res.Body)
 	if err != nil {
 		panic(err)
 	}
 	defer res.Body.Close()
-	contents, err := ioutil.ReadAll(res.Body)
+
 	if checkIsItemLink(urlObj) {
 		createItem(urlObj.Path, linkTitle, string(contents))
 
@@ -161,14 +183,12 @@ func loadUrl(targetUrl string, linkTitle string, depth *int) {
 	// Save to db middleware for able continue the progress if progress was broken
 	createMiddleWare(urlObj.Path, linkTitle)
 
-	depthVal := *depth
-	*depth++
-	if depthVal > maxDepth {
+	if depth > maxDepth {
 		return
 	}
-	time.Sleep(time.Second * 10)
+	time.Sleep(time.Second * 5)
 
-	scanMiddleware(urlObj, *res, depth)
+	scanMiddleware(urlObj, string(contents), depth)
 }
 
 func createItem(path string, linkTitle string, content string) {
@@ -183,20 +203,13 @@ func createMiddleWare(path string, linkTitle string) {
 	database.DB.Create(&middleWare)
 }
 
-
-func scanMiddleware(urlObj *url.URL, response http.Response, depth *int) {
-	// Parsing dom for finding each link, and recursivly load each middleware
-	// saving all progress to db for able to restart with pause
-	doc, err := goquery.NewDocumentFromReader(response.Body)
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Println(cualquier analgésico serviráresponse.Body)
+func scanMiddleware(urlObj *url.URL, rawHtml string, depth int) {
+	doc, _ := goquery.NewDocumentFromReader(strings.NewReader(rawHtml))
 	doc.Find("a").Each(func(i int, s *goquery.Selection) {
 		link, exist := s.Attr("href")
 		linkTitle := s.Text()
 		if exist {
-			loadUrl(link, linkTitle, depth)
+			loadUrl(link, linkTitle, depth+1)
 		}
 	})
 	// Marking middleware is finished for skipping while resume
@@ -225,6 +238,7 @@ func preLoad() {
 }
 
 func main() {
+
 	// initialization db package
 	_, err := database.Init()
 	if err != nil {
@@ -240,7 +254,7 @@ func main() {
 	fmt.Println("Default index offset for proxy:", proxyOffset)
 	depth := 1
 
-	loadUrl(protocolWithHost+"/", "main page", &depth)
+	loadUrl(protocolWithHost+"/", "main page", depth)
 }
 
 func checkError(message string, err error) {
